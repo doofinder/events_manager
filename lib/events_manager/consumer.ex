@@ -142,29 +142,6 @@ defmodule EventsManager.Consumer do
     {:stop, {:connection_lost, reason}, nil}
   end
 
-  defp connect(connection_url) do
-    case Connection.open(connection_url) do
-      {:ok, conn} ->
-        # Get notifications when the connection goes down
-        Process.monitor(conn.pid)
-        {:noreply, conn}
-
-      {:error, _} ->
-        message = """
-        [EventsManager] Failed to connect with #{connection_url}.
-        Waiting #{@reconnect_interval} milliseconds to try again ...
-        """
-        Logger.error(message)
-        # Retry later
-        Process.send_after(self(), :connect, @reconnect_interval)
-        {:noreply, nil}
-    end
-  end
-
-  defp init_consumer(connection) do
-
-  end
-
   # Set the queue name and bind to the desired exchange.
   # Returns the queue name
   @spec setup_queue(Channel.t, Basic.exchange) :: binary
