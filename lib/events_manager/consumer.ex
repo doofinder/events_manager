@@ -8,7 +8,7 @@ defmodule EventsManager.Consumer do
   function with the queue to start processing events.
 
   The messages are received one by one (prefetch_count) to guarantee
-  that any message is lost on a genserver failure.
+  that any message is not lost on a genserver failure.
   """
   use GenServer
   use AMQP
