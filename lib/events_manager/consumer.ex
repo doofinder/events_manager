@@ -41,6 +41,13 @@ defmodule EventsManager.Consumer do
   """
   @callback consume_event(event :: term) :: :ok | {:error, term}
 
+  # credo:disable-for-next-line
+  @reconnect_interval Application.get_env(
+                        :events_manager,
+                        :reconnect_interval,
+                        :timer.seconds(5)
+                      )
+
   defmodule State do
     @moduledoc """
     Module to manage the State of the Consumer
@@ -54,9 +61,9 @@ defmodule EventsManager.Consumer do
     callback.
     """
     @type t :: %__MODULE__{
-            channel: Channel.t(),
-            queue: Basic.queue(),
-            consumer_module: atom
+            channel: Channel.t() | nil,
+            queue: Basic.queue() | nil,
+            consumer_module: atom | nil
           }
   end
 
@@ -83,27 +90,36 @@ defmodule EventsManager.Consumer do
     GenServer.start_link(__MODULE__, opts, [])
   end
 
-  @spec init(Keyword.t()) ::
-          {:ok, state}
-          | {:ok, state, timeout | :hibernate | {:continue, term}}
-          | :ignore
-          | {:stop, reason :: any}
-        when state: State.t()
+  @spec init(Keyword.t()) :: {:ok, State.t()}
   def init(opts) do
     connection_uri = Keyword.get(opts, :connection_uri)
     exchange = Keyword.get(opts, :exchange_topic)
     consumer_module = Keyword.get(opts, :consumer_module)
 
-    {:ok, conn} = get_module("Connection").open(connection_uri)
-    {:ok, chan} = get_module("Channel").open(conn)
-    queue = setup_queue(chan, exchange)
+    send(self(), {:connect, connection_uri, exchange, consumer_module})
 
-    # Limit unacknowledged messages to 1
-    :ok = get_module("Basic").qos(chan, prefetch_count: 1)
-    # Register the GenServer process as a consumer
-    {:ok, _consumer_tag} = get_module("Basic").consume(chan, queue)
+    {:ok, %State{}}
+  end
 
-    {:ok, %State{channel: chan, queue: queue, consumer_module: consumer_module}}
+  # Manage connection with RabbitMQ
+  def handle_info({:connect, connection_uri, exchange, consumer_module} = params, state) do
+    case get_module("Connection").open(connection_uri) do
+      {:ok, conn} ->
+        {chan, queue} = setup_connection(conn, exchange)
+        {:noreply, %State{channel: chan, queue: queue, consumer_module: consumer_module}}
+
+      {:error, reason} ->
+        message = """
+        [EventsManager] Failed to connect #{connection_uri}.
+        With reason: #{inspect(reason)}
+        Reconnecting after #{@reconnect_interval} ms ...
+        """
+
+        Logger.error(message)
+        # Retry later
+        Process.send_after(self(), params, @reconnect_interval)
+        {:noreply, state}
+    end
   end
 
   # Confirmation sent by the broker after registering this process as a consumer
@@ -132,6 +148,12 @@ defmodule EventsManager.Consumer do
     Logger.debug("[EventsManager] Received message with payload #{inspect(payload)}")
     consume(state, tag, redelivered, payload)
     {:noreply, state}
+  end
+
+  # Channel or Connection down. Stop GenServer. Will be restarted by Supervisor.
+  def handle_info({:DOWN, _, :process, _pid, reason}, _) do
+    Logger.debug("[EventsManager] Connection with RabbitMQ lost. Reason: #{inspect(reason)}")
+    {:stop, {:connection_lost, reason}, nil}
   end
 
   @doc false
@@ -171,6 +193,22 @@ defmodule EventsManager.Consumer do
       Logger.error(message)
       :ok = get_module("Basic").reject(state.channel, tag, requeue: not redelivered)
       {:error, exception}
+  end
+
+  defp setup_connection(conn, exchange) do
+    {:ok, chan} = get_module("Channel").open(conn)
+    # Get notifications when the connection goes down
+    Process.monitor(conn.pid)
+    Process.monitor(chan.pid)
+    # Setup queue and bind exchange with channel
+    queue = setup_queue(chan, exchange)
+
+    # Limit unacknowledged messages to 1
+    :ok = get_module("Basic").qos(chan, prefetch_count: 1)
+    # Register the GenServer process as a consumer
+    {:ok, _consumer_tag} = get_module("Basic").consume(chan, queue)
+
+    {chan, queue}
   end
 
   # Set the queue name and bind to the desired exchange.
