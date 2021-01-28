@@ -41,9 +41,10 @@ defmodule EventsManager.Consumer do
   """
   @callback consume_event(event :: term) :: :ok | {:error, term}
 
-  @reconnect_interval :timer.seconds(10)
-
   defmodule State do
+    @moduledoc """
+    Module to manage the State of the Consumer
+    """
     defstruct [:channel, :queue, :consumer_module]
 
     @typedoc """
@@ -53,10 +54,10 @@ defmodule EventsManager.Consumer do
     callback.
     """
     @type t :: %__MODULE__{
-      channel: Channel.t,
-      queue: Basic.queue,
-      consumer_module: atom
-    }
+            channel: Channel.t(),
+            queue: Basic.queue(),
+            consumer_module: atom
+          }
   end
 
   @doc """
@@ -77,7 +78,7 @@ defmodule EventsManager.Consumer do
   {:ok, pid} = EventsManager.Consumer.start_link(options)
   ```
   """
-  @spec start_link(Keyword.t) :: :ignore | {:error, any} | {:ok, pid}
+  @spec start_link(Keyword.t()) :: :ignore | {:error, any} | {:ok, pid}
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts, [])
   end
@@ -87,20 +88,20 @@ defmodule EventsManager.Consumer do
           | {:ok, state, timeout | :hibernate | {:continue, term}}
           | :ignore
           | {:stop, reason :: any}
-        when state: State.t
+        when state: State.t()
   def init(opts) do
     connection_uri = Keyword.get(opts, :connection_uri)
     exchange = Keyword.get(opts, :exchange_topic)
     consumer_module = Keyword.get(opts, :consumer_module)
 
-    {:ok, conn} = Connection.open(connection_uri)
-    {:ok, chan} = Channel.open(conn)
+    {:ok, conn} = get_module("Connection").open(connection_uri)
+    {:ok, chan} = get_module("Channel").open(conn)
     queue = setup_queue(chan, exchange)
 
     # Limit unacknowledged messages to 1
-    :ok = Basic.qos(chan, prefetch_count: 1)
+    :ok = get_module("Basic").qos(chan, prefetch_count: 1)
     # Register the GenServer process as a consumer
-    {:ok, _consumer_tag} = Basic.consume(chan, queue)
+    {:ok, _consumer_tag} = get_module("Basic").consume(chan, queue)
 
     {:ok, %State{channel: chan, queue: queue, consumer_module: consumer_module}}
   end
@@ -124,42 +125,24 @@ defmodule EventsManager.Consumer do
   end
 
   # Payload received, process it.
-  def handle_info({:basic_deliver, payload, %{delivery_tag: tag, redelivered: redelivered}}, state) do
+  def handle_info(
+        {:basic_deliver, payload, %{delivery_tag: tag, redelivered: redelivered}},
+        state
+      ) do
     Logger.debug("[EventsManager] Received message with payload #{inspect(payload)}")
     consume(state, tag, redelivered, payload)
     {:noreply, state}
   end
 
-  # Manage the shutdown of the connection
-  def handle_info({:DOWN, _, :process, _pid, reason}, _) do
-    message = """
-    [EventsManager] Connection with RabbitMQ server exited with reason:
-    #{inspect(reason)}
-    Reconnecting . . .
-    """
-    Logger.error(message)
-    # Stop GenServer. Will be restarted by Supervisor.
-    {:stop, {:connection_lost, reason}, nil}
-  end
-
-  # Set the queue name and bind to the desired exchange.
-  # Returns the queue name
-  @spec setup_queue(Channel.t, Basic.exchange) :: binary
-  defp setup_queue(chan, exchange) do
-    queue = get_queue_name(exchange)
-    {:ok, _} = Queue.declare(chan, queue, auto_delete: true, exclusive: true)
-
-    :ok = Exchange.declare(chan, exchange, :fanout, durable: true)
-    :ok = Queue.bind(chan, queue, exchange)
-    queue
-  end
-
-  @spec consume(State.t, Basic.delivery_tag, boolean, term) :: :ok
-  defp consume(state, tag, redelivered, payload) do
+  @doc false
+  @spec consume(State.t(), Basic.delivery_tag(), boolean, term) ::
+          {:ok, :ack} | {:rejected, term} | {:error, term}
+  def consume(state, tag, redelivered, payload) do
     case apply(state.consumer_module, :consume_event, [payload]) do
       :ok ->
         Logger.debug("[EventsManager] Sending ack for message #{tag}")
-        :ok = Basic.ack(state.channel, tag)
+        :ok = get_module("Basic").ack(state.channel, tag)
+        {:ok, :ack}
 
       {:error, reason} ->
         message = """
@@ -168,7 +151,8 @@ defmodule EventsManager.Consumer do
         """
 
         Logger.warn(message)
-        :ok = Basic.reject(state.channel, tag, requeue: false)
+        :ok = get_module("Basic").reject(state.channel, tag, requeue: false)
+        {:rejected, reason}
     end
   rescue
     # Requeue unless it's a redelivered message.
@@ -185,11 +169,32 @@ defmodule EventsManager.Consumer do
       """
 
       Logger.error(message)
-      :ok = Basic.reject(state.channel, tag, requeue: not redelivered)
+      :ok = get_module("Basic").reject(state.channel, tag, requeue: not redelivered)
+      {:error, exception}
   end
 
-  @spec get_queue_name(Basic.exchange) :: Basic.queue
+  # Set the queue name and bind to the desired exchange.
+  # Returns the queue name
+  @spec setup_queue(Channel.t(), Basic.exchange()) :: binary
+  defp setup_queue(chan, exchange) do
+    queue = get_queue_name(exchange)
+    {:ok, _} = get_module("Queue").declare(chan, queue, auto_delete: true, exclusive: true)
+
+    :ok = get_module("Exchange").declare(chan, exchange, :fanout, durable: true)
+    :ok = get_module("Queue").bind(chan, queue, exchange)
+    queue
+  end
+
+  @spec get_queue_name(Basic.exchange()) :: Basic.queue()
   defp get_queue_name(exchange) do
     "#{Node.self()}-#{exchange}"
+  end
+
+  # Set manually module to avoid library configs
+  defp get_module(name) do
+    case Mix.env() do
+      :test -> Module.concat(AMQPMock, name)
+      _ -> Module.concat(AMQP, name)
+    end
   end
 end
