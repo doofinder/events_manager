@@ -43,7 +43,8 @@ defmodule EventsManager.MixProject do
       {:credo, "~> 1.5", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.0", only: [:dev], runtime: false},
       {:excoveralls, "~> 0.10", only: :test},
-      {:ex_doc, "~> 0.22.0", only: :dev, runtime: false}
+      {:ex_doc, "~> 0.22.0", only: :dev, runtime: false},
+      {:jason, "~> 1.2"}
     ]
   end
 
