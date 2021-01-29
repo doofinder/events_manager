@@ -8,7 +8,8 @@ payload to your function callback to execute something (act as consumer).
 
 Events manager, manage RabbitMQ connection, exchange and queues configuration,
 messaging acknowledge and you only need to provide the function callback to
-do something with the event message.
+do something with the event message. Events manager control RabbitMQ outages 
+reconnecting with the server.
 
 ## Installation
 
@@ -72,7 +73,8 @@ config :events_manager,
       exchange_topic: "test_topic_2",
       consumer_module: Test.MyAnotherConsumer
     ]
-  ]
+  ],
+  reconnect_interval: :timer.seconds(5)
 
 import_config "#{Mix.env()}.exs"
 ```
@@ -82,6 +84,7 @@ Where
   - `connection_uri` is a connection uri defined by [RabbitMQ URI spec](https://www.rabbitmq.com/uri-spec.html)
   - `exchange_topic` is a binary string with the name of the topic (RabbitMQ exchange)
   - `consumer_module` is the Module that implements the `EventsManager.Consumer` behaviour
+- `reconnect_interval` is the wait time before try to reconnect again with RabbitMQ server
 
 
 ## What is the magic?

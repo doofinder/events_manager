@@ -2,17 +2,18 @@ defmodule EventsManager.Test.Consumer do
   use ExUnit.Case
 
   alias EventsManager.Consumer
+  alias EventsManager.Consumer.State
 
   import ExUnit.CaptureLog
 
-  test "init starts amqp channel and connection" do
-    opts = [
-      connection_uri: "amqp://test:test@127.0.0.1/vhost",
-      exchange_topic: "test",
-      consumer_module: EventsManager.Test.DummyConsumer
-    ]
+  test "Connection setup" do
+    connection_uri = "amqp://test:test@127.0.0.1/vhost"
+    exchange_topic = "test"
+    consumer_module = EventsManager.Test.DummyConsumer
 
-    {:ok, state} = EventsManager.Consumer.init(opts)
+    params = {:connect, connection_uri, exchange_topic, consumer_module}
+
+    {:noreply, state} = EventsManager.Consumer.handle_info(params, %State{})
 
     assert state.channel == %AMQP.Channel{
              conn: %AMQP.Connection{pid: :conn_pid},
@@ -23,12 +24,26 @@ defmodule EventsManager.Test.Consumer do
     assert state.queue == "nonode@nohost-test"
   end
 
+  test "Connection error. Reconnecting" do
+    connection_uri = "amqp://server_error"
+    exchange_topic = "test"
+    consumer_module = EventsManager.Test.DummyConsumer
+
+    params = {:connect, connection_uri, exchange_topic, consumer_module}
+
+    assert capture_log(fn ->
+             {:noreply, state} = EventsManager.Consumer.handle_info(params, %State{})
+
+             assert state == %State{}
+           end) =~ "Failed to connect"
+  end
+
   test "Consume returns ack" do
     payload = "my payload"
     delivery_tag = 1
     redelivered = false
 
-    state = %Consumer.State{
+    state = %State{
       channel: %AMQP.Channel{
         conn: %AMQP.Connection{pid: :conn_pid},
         pid: :channel_pid
@@ -47,7 +62,7 @@ defmodule EventsManager.Test.Consumer do
     delivery_tag = 1
     redelivered = false
 
-    state = %Consumer.State{
+    state = %State{
       channel: %AMQP.Channel{
         conn: %AMQP.Connection{pid: :conn_pid},
         pid: :channel_pid
@@ -67,7 +82,7 @@ defmodule EventsManager.Test.Consumer do
     delivery_tag = 1
     redelivered = false
 
-    state = %Consumer.State{
+    state = %State{
       channel: %AMQP.Channel{
         conn: %AMQP.Connection{pid: :conn_pid},
         pid: :channel_pid
