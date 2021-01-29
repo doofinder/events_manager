@@ -160,6 +160,8 @@ defmodule EventsManager.Consumer do
   @spec consume(State.t(), Basic.delivery_tag(), boolean, term) ::
           {:ok, :ack} | {:rejected, term} | {:error, term}
   def consume(state, tag, redelivered, payload) do
+    {:ok, payload} = Jason.decode(payload)
+
     case apply(state.consumer_module, :consume_event, [payload]) do
       :ok ->
         Logger.debug("[EventsManager] Sending ack for message #{tag}")

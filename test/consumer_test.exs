@@ -39,7 +39,7 @@ defmodule EventsManager.Test.Consumer do
   end
 
   test "Consume returns ack" do
-    payload = "my payload"
+    payload = ~s/{"payload": "test"}/
     delivery_tag = 1
     redelivered = false
 
@@ -58,7 +58,7 @@ defmodule EventsManager.Test.Consumer do
   end
 
   test "Consume reject message due to error" do
-    payload = "fail payload"
+    payload = ~s/{"payload": "fail"}/
     delivery_tag = 1
     redelivered = false
 
@@ -78,7 +78,7 @@ defmodule EventsManager.Test.Consumer do
   end
 
   test "Consume reject message due to exception" do
-    payload = "exception payload"
+    payload = ~s/{"payload": "exception"}/
     delivery_tag = 1
     redelivered = false
 

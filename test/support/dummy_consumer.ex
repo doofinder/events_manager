@@ -2,12 +2,12 @@ defmodule EventsManager.Test.DummyConsumer do
   @moduledoc false
   @behaviour EventsManager.Consumer
 
-  @spec consume_event(any) :: :ok | {:error, :unexpected_error}
-  def consume_event("fail payload") do
+  @spec consume_event(term) :: :ok | {:error, :unexpected_error}
+  def consume_event(%{"payload" => "fail"}) do
     {:error, :unexpected_error}
   end
 
-  def consume_event("exception payload") do
+  def consume_event(%{"payload" => "exception"}) do
     raise "unexpected exception"
   end
 
