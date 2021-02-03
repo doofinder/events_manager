@@ -8,7 +8,9 @@ defmodule EventsManager.Application do
   def start(_type, _args) do
     children =
       Application.get_env(:events_manager, :consumers, [])
-      |> Enum.map(&{EventsManager.Consumer, &1})
+      |> Enum.map(
+        &Supervisor.child_spec({EventsManager.Consumer, &1}, id: Keyword.get(&1, :exchange_topic))
+      )
 
     # See https://hexdocs.pm/elixir/Supervisor.html
     # for other strategies and supported options
