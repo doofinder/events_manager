@@ -22,7 +22,7 @@ to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:events_manager, github: "doofinder/events_manager", tag: "1.0"}
+    {:events_manager, github: "doofinder/events_manager", tag: "1.2.0"}
   ]
 end
 ```
