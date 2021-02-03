@@ -48,6 +48,8 @@ defmodule EventsManager.Consumer do
                         :timer.seconds(5)
                       )
 
+  @env Mix.env()
+
   defmodule State do
     @moduledoc """
     Module to manage the State of the Consumer
@@ -232,7 +234,7 @@ defmodule EventsManager.Consumer do
 
   # Set manually module to avoid library configs
   defp get_module(name) do
-    case Mix.env() do
+    case @env do
       :test -> Module.concat(AMQPMock, name)
       _ -> Module.concat(AMQP, name)
     end
