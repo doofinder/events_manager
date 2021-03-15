@@ -65,18 +65,11 @@ Example of `config.exs`
 import Config
 
 config :events_manager,
-  consumers: [
-    [
-      connection_uri: "amqp://user:pass@server:<port>/vhost",
-      exchange_topic: "test_topic_1",
-      consumer_module: Test.MyConsumer
-    ],
-    [
-      connection_uri: "amqp://user:pass@server:<port>/vhost",
-      exchange_topic: "test_topic_2",
-      consumer_module: Test.MyAnotherConsumer
-    ]
-  ],
+  connection_uri: "amqp://user:pass@server:<port>/vhost",
+  consumers: %{
+    "test_topic_1" => [Test.MyModule.my_function],
+    "test_topic_2" => [Test.MyModule.my_another_function, Test.MyOtherModule.my_function],
+  },
   reconnect_interval: :timer.seconds(5)
 
 import_config "#{Mix.env()}.exs"
