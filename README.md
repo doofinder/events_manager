@@ -11,7 +11,7 @@ messaging acknowledge and you only need to provide the function callback to
 do something with the event message. Events manager control RabbitMQ outages
 reconnecting with the server.
 
-Take in mind that the payload received by ampq should be json string that is
+Notice that the payload received by ampq should be json string that is
 parsed to elixir native term before call your consumer function
 
 ## Installation
