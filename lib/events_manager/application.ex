@@ -7,7 +7,7 @@ defmodule EventsManager.Application do
 
   def start(_type, _args) do
     connection_uri = Application.get_env(:events_manager, :connection_uri)
-    consumers = Application.get_env(:events_manager, :consumers)
+    consumers = Application.get_env(:events_manager, :consumers, [])
 
     children =
       Enum.map(consumers, fn {topic, functions} ->
