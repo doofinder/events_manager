@@ -42,8 +42,8 @@ import Config
 config :events_manager,
   connection_uri: "amqp://user:pass@server:<port>/vhost",
   consumers: %{
-    "test_topic_1" => [Test.MyModule.my_function],
-    "test_topic_2" => [Test.MyModule.my_another_function, Test.MyOtherModule.my_function],
+    "test_topic_1" => [&Test.MyModule.my_function/1],
+    "test_topic_2" => [&Test.MyModule.my_another_function/1, &Test.MyOtherModule.my_function/1],
   },
   reconnect_interval: :timer.seconds(5)
 
@@ -71,7 +71,7 @@ end
 
 The function should return `:ok` if the process of the event
 has been done without errors or a tuple `{:error, reason}` if there is
-any error on the process the message won't be re-enqueued and a log will
+any error in any of the functions the message won't be re-enqueued and a log will
 be produced.
 
 If an exception is raised when consuming the event, the message will be

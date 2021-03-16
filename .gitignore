@@ -24,3 +24,5 @@ events_manager-*.tar
 
 # Ignore logs path
 /log/
+
+.tool-versions
