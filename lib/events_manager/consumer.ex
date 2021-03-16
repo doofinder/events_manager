@@ -15,32 +15,6 @@ defmodule EventsManager.Consumer do
 
   require Logger
 
-  @doc """
-  Invoked when the Consumer receive an event from RabbitMQ
-
-  `event` is the message payload and the only callback parameter.
-
-  The `consume_event` function should return `:ok` if the process of the event
-  has been done without errors or a tuple `{:error, reason}` if there are
-  any error.
-
-  Example
-  ```elixir
-  defmodule Test.MyConsumer do
-    @behaviour EventsManager.Consumer
-
-    @impl true
-    @spec consume_event(event :: term) :: :ok | {:error, term}
-    def consume_event(event) do
-      IO.inspect(event)
-
-      :ok
-    end
-  end
-  ```
-  """
-  @callback consume_event(event :: term) :: :ok | {:error, term}
-
   # credo:disable-for-next-line
   @reconnect_interval Application.get_env(
                         :events_manager,
@@ -54,19 +28,25 @@ defmodule EventsManager.Consumer do
     @moduledoc """
     Module to manage the State of the Consumer
     """
-    defstruct [:channel, :queue, :consumer_module]
+    defstruct [:channel, :queue, :consumer_functions]
 
     @typedoc """
-    Type to manage `EventsManager.Consumer` state. Store
+    Type to manage `EventsManager.Consumer` state. Stores
     the Rabbit connection channel, the queue name and
-    the consumer module with implemented `EventsManager.Consumer`
-    callback.
+    the consumer functions.
     """
     @type t :: %__MODULE__{
             channel: Channel.t() | nil,
             queue: Basic.queue() | nil,
-            consumer_module: atom | nil
+            consumer_functions: [atom] | nil
           }
+  end
+
+  def child_spec(arg) do
+    %{
+      id: Keyword.get(arg, :exchange_topic),
+      start: {__MODULE__, :start_link, [arg]}
+    }
   end
 
   @doc """
@@ -74,14 +54,15 @@ defmodule EventsManager.Consumer do
 
   - `connection_uri`: AMQP connection uri
   - `exchange_topic`: RabbitMQ exchange name
-  - `consumer_module`: Module with `EventsManager.Consumer` callback implemented
+  - `consumer_functions`: Functions that will receive the events
 
   example
   ```
-  options = [
+  options =
+    [
       connection_uri: "amqp://user:pass@server:<port>/vhost",
       exchange_topic: "test_topic_1",
-      consumer_module: Test.MyConsumer
+      consumer_functions: [&Test.MyConsumer.my_function/1]
     ]
 
   {:ok, pid} = EventsManager.Consumer.start_link(options)
@@ -96,19 +77,19 @@ defmodule EventsManager.Consumer do
   def init(opts) do
     connection_uri = Keyword.get(opts, :connection_uri)
     exchange = Keyword.get(opts, :exchange_topic)
-    consumer_module = Keyword.get(opts, :consumer_module)
+    consumer_functions = Keyword.get(opts, :consumer_functions)
 
-    send(self(), {:connect, connection_uri, exchange, consumer_module})
+    send(self(), {:connect, connection_uri, exchange, consumer_functions})
 
     {:ok, %State{}}
   end
 
   # Manage connection with RabbitMQ
-  def handle_info({:connect, connection_uri, exchange, consumer_module} = params, state) do
+  def handle_info({:connect, connection_uri, exchange, consumer_functions} = params, state) do
     case get_module("Connection").open(connection_uri) do
       {:ok, conn} ->
         {chan, queue} = setup_connection(conn, exchange)
-        {:noreply, %State{channel: chan, queue: queue, consumer_module: consumer_module}}
+        {:noreply, %State{channel: chan, queue: queue, consumer_functions: consumer_functions}}
 
       {:error, reason} ->
         message = """
@@ -160,25 +141,31 @@ defmodule EventsManager.Consumer do
 
   @doc false
   @spec consume(State.t(), Basic.delivery_tag(), boolean, term) ::
-          {:ok, :ack} | {:rejected, term} | {:error, term}
+          {:ok, :ack} | {:rejected, any} | {:error, term}
   def consume(state, tag, redelivered, payload) do
     {:ok, payload} = Jason.decode(payload)
 
-    case apply(state.consumer_module, :consume_event, [payload]) do
-      :ok ->
-        Logger.debug("[EventsManager] Sending ack for message #{tag}")
-        :ok = get_module("Basic").ack(state.channel, tag)
-        {:ok, :ack}
+    errors =
+      state.consumer_functions
+      |> Enum.map(& &1.(payload))
+      |> Enum.reject(&(&1 == :ok))
 
-      {:error, reason} ->
+    if length(errors) == 0 do
+      Logger.debug("[EventsManager] Sending ack for message #{tag}")
+      :ok = get_module("Basic").ack(state.channel, tag)
+      {:ok, :ack}
+    else
+      Enum.each(errors, fn {_k, reason} ->
         message = """
         [EventsManager] Failed to process the message #{inspect(payload)}.
         Reason: #{inspect(reason)}
         """
 
         Logger.warn(message)
-        :ok = get_module("Basic").reject(state.channel, tag, requeue: false)
-        {:rejected, reason}
+      end)
+
+      :ok = get_module("Basic").reject(state.channel, tag, requeue: false)
+      {:rejected, errors}
     end
   rescue
     # Requeue unless it's a redelivered message.
