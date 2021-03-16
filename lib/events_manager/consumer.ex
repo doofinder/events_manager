@@ -148,7 +148,7 @@ defmodule EventsManager.Consumer do
     errors =
       state.consumer_functions
       |> Enum.map(& &1.(payload))
-      |> Enum.reject(& &1 == :ok)
+      |> Enum.reject(&(&1 == :ok))
 
     if length(errors) == 0 do
       Logger.debug("[EventsManager] Sending ack for message #{tag}")
@@ -160,6 +160,7 @@ defmodule EventsManager.Consumer do
         [EventsManager] Failed to process the message #{inspect(payload)}.
         Reason: #{inspect(reason)}
         """
+
         Logger.warn(message)
       end)
 
