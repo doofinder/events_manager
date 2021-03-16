@@ -69,6 +69,13 @@ defmodule EventsManager.Consumer do
           }
   end
 
+  def child_spec(arg) do
+    %{
+      id: Keyword.get(arg, :exchange_topic),
+      start: {__MODULE__, :start_link, [arg]}
+    }
+  end
+
   @doc """
   Starts the Consumer Server with the given `opts` keyword list
 
