@@ -20,8 +20,16 @@ defmodule EventsManager.Application do
       end)
 
     # See https://hexdocs.pm/elixir/Supervisor.html
-    # for other strategies and supported options
-    opts = [strategy: :one_for_one, name: EventsManager.Supervisor]
+    # for other strategies and supported options.
+    # All consumers are under the same Supervisor. If RabbitMQ closes the
+    # connection, all consumers are restarted in a brief period and can exceed
+    # the maximum number of restarts. For that reason the max_restarts is
+    # configured with the number of consumers, and max seconds has a smaller
+    # window.
+    opts = [strategy: :one_for_one, name: EventsManager.Supervisor,
+            max_restarts: length(children) * 2,
+            max_seconds: 1]
+
     Supervisor.start_link(children, opts)
   end
 end

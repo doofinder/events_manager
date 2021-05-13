@@ -1,7 +1,8 @@
 defmodule EventsManager.MixProject do
   use Mix.Project
 
-  @version "2.0.0"
+  @source_url "https://github.com/doofinder/events_manager"
+  @version "2.0.1"
 
   def project do
     [
@@ -12,12 +13,15 @@ defmodule EventsManager.MixProject do
       elixirc_paths: elixir_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       deps: deps(),
-      docs: [
-        extras: ["README.md"],
-        main: "readme",
-        source_ref: "v#{@version}",
-        source_url: "https://github.com/doofinder/events_manager"
-      ],
+
+      # Hex
+      description:
+        "Events manager is an application to manage events sent by RabbitMQ using AMQP protocol",
+      package: package(),
+
+      # Docs
+      docs: docs(),
+
       preferred_cli_env: [
         coveralls: :test,
         "coveralls.detail": :test,
@@ -25,6 +29,24 @@ defmodule EventsManager.MixProject do
         "coveralls.html": :test
       ],
       test_coverage: [tool: ExCoveralls]
+    ]
+  end
+
+  defp package do
+    [
+      organization: "doofinder",
+      licenses: [],
+      links: %{"GitHub" => @source_url}
+    ]
+
+  end
+
+  defp docs do
+    [
+      extras: ["README.md"],
+      main: "readme",
+      source_ref: "v#{@version}",
+      source_url: @source_url
     ]
   end
 
