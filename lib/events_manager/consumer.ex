@@ -216,7 +216,8 @@ defmodule EventsManager.Consumer do
 
   @spec get_queue_name(Basic.exchange()) :: Basic.queue()
   defp get_queue_name(exchange) do
-    "#{Node.self()}-#{exchange}"
+    random = random_string(5)
+    "#{Node.self()}-#{exchange}-#{random}"
   end
 
   # Set manually module to avoid library configs
@@ -225,5 +226,14 @@ defmodule EventsManager.Consumer do
       :test -> Module.concat(AMQPMock, name)
       _ -> Module.concat(AMQP, name)
     end
+  end
+
+  @spec random_string(integer) :: binary
+  defp random_string(length) do
+    alphabet = Enum.concat([?0..?9, ?A..?Z, ?a..?z])
+
+    1..length
+    |> Enum.map(fn _ -> Enum.random(alphabet) end)
+    |> String.Chars.to_string()
   end
 end
