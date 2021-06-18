@@ -21,7 +21,7 @@ defmodule EventsManager.Test.Consumer do
            }
 
     assert state.consumer_functions == [&EventsManager.Test.DummyConsumer.consume_event/1]
-    assert state.queue == "nonode@nohost-test"
+    assert "nonode@nohost-test-" <> _random = state.queue
   end
 
   test "Connection error. Reconnecting" do
